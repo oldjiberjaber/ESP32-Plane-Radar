@@ -1,8 +1,16 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace services::adsb {
+
+enum class AircraftCategory : uint8_t {
+  Commercial,
+  GeneralAviation,
+  Helicopter,
+  Military,
+};
 
 struct Aircraft {
   float lat;
@@ -15,6 +23,7 @@ struct Aircraft {
   char alt[12];
   bool is_military;
   bool is_emergency;
+  AircraftCategory category;
 };
 
 constexpr size_t kMaxAircraft = 64;

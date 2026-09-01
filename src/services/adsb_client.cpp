@@ -254,6 +254,68 @@ bool isEmergencyAircraft(const JsonObject& plane) {
   return false;
 }
 
+AircraftCategory classifyAircraftCategory(const JsonObject& plane,
+                                         const char* type,
+                                         bool is_military) {
+  if (is_military) {
+    return AircraftCategory::Military;
+  }
+
+  // 1. Check ADS-B emitter category (A1..A7, B1..B7, etc.)
+  if (plane["category"].is<const char*>()) {
+    const char* cat = plane["category"].as<const char*>();
+    if (cat != nullptr && cat[0] != '\0') {
+      if (strcasecmp(cat, "A7") == 0) {
+        return AircraftCategory::Helicopter;
+      }
+      if (strcasecmp(cat, "A1") == 0 || strcasecmp(cat, "B1") == 0 ||
+          strcasecmp(cat, "B2") == 0 || strcasecmp(cat, "B6") == 0) {
+        return AircraftCategory::GeneralAviation;
+      }
+      if (strcasecmp(cat, "A2") == 0 || strcasecmp(cat, "A3") == 0 ||
+          strcasecmp(cat, "A4") == 0 || strcasecmp(cat, "A5") == 0) {
+        return AircraftCategory::Commercial;
+      }
+    }
+  }
+
+  // 2. Check ICAO type code
+  if (type != nullptr && type[0] != '\0') {
+    // Rotorcraft / Helicopter types
+    static const char* const kHeliTypes[] = {
+        "EC35", "EC45", "H135", "H145", "H125", "AS50", "AS55", "R22",  "R44",
+        "R66",  "A109", "A119", "A139", "AW139", "AW169", "AW189", "S76",  "S92",
+        "B06",  "B407", "B429", "B212", "B412", "MD52", "MD60", "G2CA", "EC20",
+        "EC30", "AS32", "BK11", "SA34", "HUCO", "B05",  "UH12", "CH47", "EH10"
+    };
+    for (const char* h_type : kHeliTypes) {
+      if (strcasecmp(type, h_type) == 0) {
+        return AircraftCategory::Helicopter;
+      }
+    }
+
+    // General Aviation / Light Propellers / Turboprops
+    static const char* const kGaTypes[] = {
+        "C150", "C152", "C172", "C182", "C206", "C208", "C210", "PA28", "PA32",
+        "PA34", "PA38", "PA44", "PA46", "SR20", "SR22", "DA20", "DA40", "DA42",
+        "DA62", "BE33", "BE35", "BE36", "BE58", "BE76", "BE9L", "BE20", "BE30",
+        "B350", "PC12", "PC21", "TBM7", "TBM8", "TBM9", "TB20", "M20P", "M20T",
+        "AA5",  "RV6",  "RV7",  "RV8",  "RV9",  "RV10", "RV12", "RV14", "P28A",
+        "P28R", "P32R", "P46T", "AT43", "AT45", "AT72", "AT75", "AT76", "DH8A",
+        "DH8B", "DH8C", "DH8D", "D228", "D328", "SB20", "SF34", "JS31", "JS32",
+        "JS41", "L410", "SW4",  "BN2P", "DHC6", "DHC2", "AN2",  "AN24", "AN26"
+    };
+    for (const char* ga_type : kGaTypes) {
+      if (strcasecmp(type, ga_type) == 0) {
+        return AircraftCategory::GeneralAviation;
+      }
+    }
+  }
+
+  // Default to Commercial / Jet
+  return AircraftCategory::Commercial;
+}
+
 void fillTagFields(Aircraft* ac, const JsonObject& plane) {
   copyJsonStringTrimmed(plane, "flight", ac->callsign, sizeof(ac->callsign));
   if (ac->callsign[0] == '\0') {
@@ -264,6 +326,7 @@ void fillTagFields(Aircraft* ac, const JsonObject& plane) {
   formatAltitudeTag(plane, ac->alt, sizeof(ac->alt));
   ac->is_military = isMilitaryAircraft(plane, ac->type, ac->callsign);
   ac->is_emergency = isEmergencyAircraft(plane);
+  ac->category = classifyAircraftCategory(plane, ac->type, ac->is_military);
 }
 
 }  // namespace

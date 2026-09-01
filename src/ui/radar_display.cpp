@@ -22,9 +22,10 @@ uint16_t kColorBackground = 0x0000;
 uint16_t kColorGrid = 0x0320;
 uint16_t kColorLabel = 0xFFFF;
 uint16_t kColorCenter = 0xFFFF;
-uint16_t kColorAircraft = 0x001F;
-uint16_t kColorMilitaryAircraft = 0x07FF;
-uint16_t kColorMilitaryTag = 0x07FF;
+uint16_t kColorMilitary = 0xF800;
+uint16_t kColorCommercial = 0x07FF;
+uint16_t kColorGA = 0x07E0;
+uint16_t kColorHeli = 0xFFE0;
 uint16_t kColorTrackVector = 0xFFFF;
 uint16_t kColorTagType = 0x5DFF;
 uint16_t kColorTagAltitude = 0xFFE0;
@@ -34,6 +35,25 @@ uint16_t kColorRunwayLabel = 0x7DFF;
 }  // namespace radar
 
 namespace {
+
+uint16_t getAircraftColor(const services::adsb::Aircraft& plane) {
+  if (plane.is_emergency) {
+    return tft.color565(255, 30, 30);
+  }
+  if (plane.is_military ||
+      plane.category == services::adsb::AircraftCategory::Military) {
+    return radar::kColorMilitary;
+  }
+  switch (plane.category) {
+    case services::adsb::AircraftCategory::Helicopter:
+      return radar::kColorHeli;
+    case services::adsb::AircraftCategory::GeneralAviation:
+      return radar::kColorGA;
+    case services::adsb::AircraftCategory::Commercial:
+    default:
+      return radar::kColorCommercial;
+  }
+}
 
 bool s_label_metrics_ready = false;
 bool s_cardinal_use_vlw = false;
@@ -181,19 +201,23 @@ void initPalette() {
   radar::kColorCenter = tft.color565(255, 255, 255);
   // GC9A01 BGR panel: swap R/B in color565 so logical red renders red on screen.
   if (config::kDisplayRgbOrder) {
-    radar::kColorAircraft =
-        tft.color565(radar::kAircraftB, radar::kAircraftG, radar::kAircraftR);
-    radar::kColorMilitaryAircraft =
+    radar::kColorMilitary =
         tft.color565(radar::kMilitaryB, radar::kMilitaryG, radar::kMilitaryR);
-    radar::kColorMilitaryTag =
-        tft.color565(radar::kMilitaryB, radar::kMilitaryG, radar::kMilitaryR);
+    radar::kColorCommercial =
+        tft.color565(radar::kCommercialB, radar::kCommercialG, radar::kCommercialR);
+    radar::kColorGA =
+        tft.color565(radar::kGaB, radar::kGaG, radar::kGaR);
+    radar::kColorHeli =
+        tft.color565(radar::kHeliB, radar::kHeliG, radar::kHeliR);
   } else {
-    radar::kColorAircraft =
-        tft.color565(radar::kAircraftR, radar::kAircraftG, radar::kAircraftB);
-    radar::kColorMilitaryAircraft =
+    radar::kColorMilitary =
         tft.color565(radar::kMilitaryR, radar::kMilitaryG, radar::kMilitaryB);
-    radar::kColorMilitaryTag =
-        tft.color565(radar::kMilitaryR, radar::kMilitaryG, radar::kMilitaryB);
+    radar::kColorCommercial =
+        tft.color565(radar::kCommercialR, radar::kCommercialG, radar::kCommercialB);
+    radar::kColorGA =
+        tft.color565(radar::kGaR, radar::kGaG, radar::kGaB);
+    radar::kColorHeli =
+        tft.color565(radar::kHeliR, radar::kHeliG, radar::kHeliB);
   }
   radar::kColorTrackVector =
       tft.color565(radar::kTrackR, radar::kTrackG, radar::kTrackB);
@@ -444,12 +468,7 @@ void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane,
   ly = std::max(1, std::min(ly, radar::kSize - block_h - 1));
 
   if (plane.callsign[0] != '\0') {
-    uint16_t callsign_color = radar::kColorLabel;
-    if (plane.is_emergency) {
-      callsign_color = tft.color565(255, 50, 50);
-    } else if (plane.is_military) {
-      callsign_color = radar::kColorMilitaryTag;
-    }
+    const uint16_t callsign_color = getAircraftColor(plane);
     s_draw->setTextColor(callsign_color, radar::kColorBackground);
     s_draw->drawString(plane.callsign, anchor_x, ly);
   }
@@ -478,6 +497,8 @@ struct BeyondDotDrawItem {
   int x = 0;
   int y = 0;
   int dist_sq = 0;
+  services::adsb::AircraftCategory category =
+      services::adsb::AircraftCategory::Commercial;
   bool is_military = false;
   bool is_emergency = false;
 };
@@ -545,6 +566,7 @@ void drawAircraft() {
     dots[dot_count].x = dot_x;
     dots[dot_count].y = dot_y;
     dots[dot_count].dist_sq = distSqFromCenter(dot_x, dot_y);
+    dots[dot_count].category = planes[i].category;
     dots[dot_count].is_military = planes[i].is_military;
     dots[dot_count].is_emergency = planes[i].is_emergency;
     ++dot_count;
@@ -555,11 +577,19 @@ void drawAircraft() {
     if (dots[d].is_emergency && !emergency_phase) {
       continue;
     }
-    const uint16_t dot_color = dots[d].is_emergency
-                                   ? tft.color565(255, 50, 50)
-                                   : (dots[d].is_military
-                                          ? radar::kColorMilitaryAircraft
-                                          : radar::kColorAircraft);
+    uint16_t dot_color = radar::kColorCommercial;
+    if (dots[d].is_emergency) {
+      dot_color = tft.color565(255, 30, 30);
+    } else if (dots[d].is_military ||
+               dots[d].category == services::adsb::AircraftCategory::Military) {
+      dot_color = radar::kColorMilitary;
+    } else if (dots[d].category ==
+               services::adsb::AircraftCategory::Helicopter) {
+      dot_color = radar::kColorHeli;
+    } else if (dots[d].category ==
+               services::adsb::AircraftCategory::GeneralAviation) {
+      dot_color = radar::kColorGA;
+    }
     drawBeyondRingDot(dots[d].x, dots[d].y, dot_color);
   }
 
@@ -571,11 +601,7 @@ void drawAircraft() {
     }
     const int x = items[d].x;
     const int y = items[d].y;
-    const uint16_t plane_color =
-        planes[i].is_emergency
-            ? tft.color565(255, 50, 50)
-            : (planes[i].is_military ? radar::kColorMilitaryAircraft
-                                     : radar::kColorAircraft);
+    const uint16_t plane_color = getAircraftColor(planes[i]);
     drawSpeedVector(x, y, planes[i].nose_deg, planes[i].track_deg,
                     planes[i].gs_knots, radar::kColorTrackVector);
     drawHeadingTriangle(x, y, planes[i].nose_deg, plane_color);

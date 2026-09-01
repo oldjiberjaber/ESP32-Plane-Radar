@@ -69,12 +69,27 @@ constexpr uint8_t kBgB = 28;
 constexpr uint8_t kGridR = 16;
 constexpr uint8_t kGridG = 100;
 constexpr uint8_t kGridB = 32;
-constexpr uint8_t kAircraftR = 255;
-constexpr uint8_t kAircraftG = 0;
-constexpr uint8_t kAircraftB = 0;
-constexpr uint8_t kMilitaryR = 0;
-constexpr uint8_t kMilitaryG = 230;
-constexpr uint8_t kMilitaryB = 255;
+// Aircraft category palette targets:
+// Military: Always Red
+constexpr uint8_t kMilitaryR = 255;
+constexpr uint8_t kMilitaryG = 0;
+constexpr uint8_t kMilitaryB = 0;
+
+// Commercial / Airliners / Jets: Bright Cyan
+constexpr uint8_t kCommercialR = 0;
+constexpr uint8_t kCommercialG = 220;
+constexpr uint8_t kCommercialB = 255;
+
+// General Aviation / Propellers: Bright Lime Green
+constexpr uint8_t kGaR = 50;
+constexpr uint8_t kGaG = 240;
+constexpr uint8_t kGaB = 50;
+
+// Helicopters / Rotorcraft: Gold / Amber
+constexpr uint8_t kHeliR = 255;
+constexpr uint8_t kHeliG = 190;
+constexpr uint8_t kHeliB = 0;
+
 constexpr uint8_t kTrackR = 255;
 constexpr uint8_t kTrackG = 0;
 constexpr uint8_t kTrackB = 255;
@@ -96,9 +111,10 @@ extern uint16_t kColorBackground;
 extern uint16_t kColorGrid;
 extern uint16_t kColorLabel;
 extern uint16_t kColorCenter;
-extern uint16_t kColorAircraft;
-extern uint16_t kColorMilitaryAircraft;
-extern uint16_t kColorMilitaryTag;
+extern uint16_t kColorMilitary;
+extern uint16_t kColorCommercial;
+extern uint16_t kColorGA;
+extern uint16_t kColorHeli;
 extern uint16_t kColorTrackVector;
 extern uint16_t kColorTagType;
 extern uint16_t kColorTagAltitude;
