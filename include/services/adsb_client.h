@@ -14,12 +14,14 @@ struct Aircraft {
   char type[5];
   char alt[12];
   bool is_military;
+  bool is_emergency;
 };
 
 constexpr size_t kMaxAircraft = 64;
 
 size_t aircraftCount();
 const Aircraft* aircraftList();
+bool hasEmergencyAircraft();
 
 /** Hook invoked during long HTTP I/O (e.g. wifiLoop). Optional. */
 using PollFn = void (*)();

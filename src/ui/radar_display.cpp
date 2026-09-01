@@ -414,7 +414,11 @@ int measureTagBlockWidth(const services::adsb::Aircraft& plane) {
   return max_w;
 }
 
-void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane) {
+void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane,
+                     bool emergency_phase) {
+  if (plane.is_emergency && !emergency_phase) {
+    return;
+  }
   initTagLabelMetrics();
   applyTagStyle();
 
@@ -440,8 +444,12 @@ void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane) {
   ly = std::max(1, std::min(ly, radar::kSize - block_h - 1));
 
   if (plane.callsign[0] != '\0') {
-    const uint16_t callsign_color =
-        plane.is_military ? radar::kColorMilitaryTag : radar::kColorLabel;
+    uint16_t callsign_color = radar::kColorLabel;
+    if (plane.is_emergency) {
+      callsign_color = tft.color565(255, 50, 50);
+    } else if (plane.is_military) {
+      callsign_color = radar::kColorMilitaryTag;
+    }
     s_draw->setTextColor(callsign_color, radar::kColorBackground);
     s_draw->drawString(plane.callsign, anchor_x, ly);
   }
@@ -471,6 +479,7 @@ struct BeyondDotDrawItem {
   int y = 0;
   int dist_sq = 0;
   bool is_military = false;
+  bool is_emergency = false;
 };
 
 void sortDrawItemsFarFirst(AircraftDrawItem* items, size_t count) {
@@ -502,6 +511,7 @@ void drawAircraft() {
 
   const size_t n = services::adsb::aircraftCount();
   const services::adsb::Aircraft* planes = services::adsb::aircraftList();
+  const bool emergency_phase = (millis() / 400) % 2 == 0;
 
   AircraftDrawItem items[services::adsb::kMaxAircraft];
   BeyondDotDrawItem dots[services::adsb::kMaxAircraft];
@@ -536,32 +546,43 @@ void drawAircraft() {
     dots[dot_count].y = dot_y;
     dots[dot_count].dist_sq = distSqFromCenter(dot_x, dot_y);
     dots[dot_count].is_military = planes[i].is_military;
+    dots[dot_count].is_emergency = planes[i].is_emergency;
     ++dot_count;
   }
 
   sortBeyondDotsFarFirst(dots, dot_count);
   for (size_t d = 0; d < dot_count; ++d) {
-    const uint16_t dot_color = dots[d].is_military
-                                   ? radar::kColorMilitaryAircraft
-                                   : radar::kColorAircraft;
+    if (dots[d].is_emergency && !emergency_phase) {
+      continue;
+    }
+    const uint16_t dot_color = dots[d].is_emergency
+                                   ? tft.color565(255, 50, 50)
+                                   : (dots[d].is_military
+                                          ? radar::kColorMilitaryAircraft
+                                          : radar::kColorAircraft);
     drawBeyondRingDot(dots[d].x, dots[d].y, dot_color);
   }
 
   sortDrawItemsFarFirst(items, draw_count);
   for (size_t d = 0; d < draw_count; ++d) {
     const size_t i = items[d].index;
+    if (planes[i].is_emergency && !emergency_phase) {
+      continue;
+    }
     const int x = items[d].x;
     const int y = items[d].y;
-    const uint16_t plane_color = planes[i].is_military
-                                     ? radar::kColorMilitaryAircraft
-                                     : radar::kColorAircraft;
+    const uint16_t plane_color =
+        planes[i].is_emergency
+            ? tft.color565(255, 50, 50)
+            : (planes[i].is_military ? radar::kColorMilitaryAircraft
+                                     : radar::kColorAircraft);
     drawSpeedVector(x, y, planes[i].nose_deg, planes[i].track_deg,
                     planes[i].gs_knots, radar::kColorTrackVector);
     drawHeadingTriangle(x, y, planes[i].nose_deg, plane_color);
   }
   for (size_t d = 0; d < draw_count; ++d) {
     const size_t i = items[d].index;
-    drawAircraftTag(items[d].x, items[d].y, planes[i]);
+    drawAircraftTag(items[d].x, items[d].y, planes[i], emergency_phase);
   }
 }
 

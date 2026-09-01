@@ -235,6 +235,25 @@ bool isMilitaryAircraft(const JsonObject& plane, const char* type,
   return false;
 }
 
+bool isEmergencyAircraft(const JsonObject& plane) {
+  // 1. Explicit emergency string other than "none"
+  if (plane["emergency"].is<const char*>()) {
+    const char* em = plane["emergency"].as<const char*>();
+    if (em != nullptr && em[0] != '\0' && strcasecmp(em, "none") != 0) {
+      return true;
+    }
+  }
+  // 2. Emergency Squawk codes (7700 = general, 7600 = radio fail, 7500 = unlawful)
+  if (plane["squawk"].is<const char*>()) {
+    const char* sq = plane["squawk"].as<const char*>();
+    if (sq != nullptr && (strcmp(sq, "7700") == 0 || strcmp(sq, "7600") == 0 ||
+                          strcmp(sq, "7500") == 0)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void fillTagFields(Aircraft* ac, const JsonObject& plane) {
   copyJsonStringTrimmed(plane, "flight", ac->callsign, sizeof(ac->callsign));
   if (ac->callsign[0] == '\0') {
@@ -244,6 +263,7 @@ void fillTagFields(Aircraft* ac, const JsonObject& plane) {
   copyJsonStringTrimmed(plane, "t", ac->type, sizeof(ac->type));
   formatAltitudeTag(plane, ac->alt, sizeof(ac->alt));
   ac->is_military = isMilitaryAircraft(plane, ac->type, ac->callsign);
+  ac->is_emergency = isEmergencyAircraft(plane);
 }
 
 }  // namespace
@@ -253,6 +273,15 @@ void setPollFn(PollFn fn) { s_poll_fn = fn; }
 size_t aircraftCount() { return s_aircraft_count; }
 
 const Aircraft* aircraftList() { return s_aircraft; }
+
+bool hasEmergencyAircraft() {
+  for (size_t i = 0; i < s_aircraft_count; ++i) {
+    if (s_aircraft[i].is_emergency) {
+      return true;
+    }
+  }
+  return false;
+}
 
 bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km) {
   const float dist_nm = kmToNauticalMiles(fetch_radius_km);
