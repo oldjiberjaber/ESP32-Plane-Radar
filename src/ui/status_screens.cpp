@@ -239,3 +239,111 @@ void statusScreenWifiReset() {
   drawTextBlock(config::kColorYellow, config::kTextOnYellow, lines,
                 sizeof(lines) / sizeof(lines[0]));
 }
+
+void statusScreenConnected(const char* ip, const char* hostname) {
+  const TextLine lines[] = {
+      {"Connected", 1.15f, &kPortalGfxTitle},
+      {"IP address:", 1.0f, &kPortalGfxBody},
+      {ip, 1.12f, &kPortalGfxEmphasis},
+      {"Web config:", 1.0f, &kPortalGfxBody},
+      {hostname, 1.10f, &kPortalGfxEmphasis},
+  };
+  drawTextBlock(config::kColorYellow, config::kTextOnYellow, lines,
+                sizeof(lines) / sizeof(lines[0]));
+}
+
+namespace {
+int s_last_update_percent = -1;
+constexpr int kBarX = 35;
+constexpr int kBarY = 110;
+constexpr int kBarWidth = 170;
+constexpr int kBarHeight = 16;
+constexpr int kBarRadius = 4;
+}  // namespace
+
+void statusScreenUpdateBegin(const char* title) {
+  s_last_update_percent = -1;
+  tft.fillScreen(config::kColorBlack);
+  tft.setTextColor(config::kTextOnBlack, config::kColorBlack);
+  tft.setTextDatum(textdatum_t::middle_center);
+
+  if (displayFontIsSmooth()) {
+    displayFontSetSmoothSize(tft, 1.15f);
+  } else {
+    displayFontSetBitmap(tft, &kPortalGfxTitle);
+  }
+  tft.drawString(title != nullptr ? title : "Firmware Update", kCenterX, 48);
+
+  if (displayFontIsSmooth()) {
+    displayFontSetSmoothSize(tft, 0.95f);
+  } else {
+    displayFontSetBitmap(tft, &kConnectingGfxDetail);
+  }
+  tft.setTextColor(tft.color565(120, 200, 255), config::kColorBlack);
+  tft.drawString("Receiving image...", kCenterX, 76);
+
+  // Outer progress bar border
+  tft.drawRoundRect(kBarX, kBarY, kBarWidth, kBarHeight, kBarRadius, config::kTextOnBlack);
+  tft.fillRect(kBarX + 2, kBarY + 2, kBarWidth - 4, kBarHeight - 4, config::kColorBlack);
+
+  // Warning text
+  tft.setTextColor(config::kColorYellow, config::kColorBlack);
+  if (displayFontIsSmooth()) {
+    displayFontSetSmoothSize(tft, 0.88f);
+  } else {
+    displayFontSetBitmap(tft, &kConnectingGfxDetail);
+  }
+  tft.drawString("Do not unplug power", kCenterX, 185);
+
+  statusScreenUpdateProgress(0);
+}
+
+void statusScreenUpdateProgress(int percent) {
+  percent = constrain(percent, 0, 100);
+  if (percent == s_last_update_percent) {
+    return;
+  }
+  s_last_update_percent = percent;
+
+  // Fill inner bar
+  const int inner_max_w = kBarWidth - 4;
+  const int fill_w = (inner_max_w * percent) / 100;
+  if (fill_w > 0) {
+    tft.fillRoundRect(kBarX + 2, kBarY + 2, fill_w, kBarHeight - 4, 2, tft.color565(0, 220, 80));
+  }
+  if (inner_max_w - fill_w > 0) {
+    tft.fillRect(kBarX + 2 + fill_w, kBarY + 2, inner_max_w - fill_w, kBarHeight - 4, config::kColorBlack);
+  }
+
+  // Draw percentage text
+  char pct_buf[16];
+  snprintf(pct_buf, sizeof(pct_buf), "%d%%", percent);
+  tft.setTextDatum(textdatum_t::middle_center);
+  tft.setTextColor(config::kTextOnBlack, config::kColorBlack);
+  if (displayFontIsSmooth()) {
+    displayFontSetSmoothSize(tft, 1.10f);
+  } else {
+    displayFontSetBitmap(tft, &kPortalGfxBody);
+  }
+  tft.fillRect(kCenterX - 40, 138, 80, 24, config::kColorBlack);
+  tft.drawString(pct_buf, kCenterX, 150);
+}
+
+void statusScreenUpdateEnd() {
+  const TextLine lines[] = {
+      {"Update complete", 1.15f, &kPortalGfxTitle},
+      {"Rebooting...", 1.05f, &kPortalGfxBody},
+  };
+  drawTextBlock(config::kColorBlack, tft.color565(0, 255, 100), lines,
+                sizeof(lines) / sizeof(lines[0]));
+}
+
+void statusScreenUpdateError(const char* message) {
+  const TextLine lines[] = {
+      {"Update failed", 1.15f, &kGfxTitle},
+      {message != nullptr ? message : "Error writing flash", 1.0f, &kGfxBody},
+      {"Please reboot device", 0.95f, &kConnectingGfxDetail},
+  };
+  drawTextBlock(config::kColorYellow, config::kTextOnYellow, lines,
+                sizeof(lines) / sizeof(lines[0]));
+}

@@ -78,6 +78,13 @@ void setup() {
   services::adsb::setPollFn(wifiLoop);
 
   if (wifiSetupConnect()) {
+    statusScreenConnected(WiFi.localIP().toString().c_str(), config::kPortalHostUrl);
+    const unsigned long until = millis() + config::kConnectedStatusDurationMs;
+    while (millis() < until) {
+      handleBootButton();
+      wifiLoop();
+      delay(20);
+    }
     showRadarIfConnected();
   }
 }

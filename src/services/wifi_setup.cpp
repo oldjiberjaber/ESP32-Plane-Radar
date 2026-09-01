@@ -1,5 +1,7 @@
 #include "services/wifi_setup.h"
 
+#include <ArduinoOTA.h>
+#include <Update.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
 
@@ -70,8 +72,160 @@ bool wifiLinkUp();
 
 constexpr int kCoordParamLen = 20;
 constexpr char kCoordInputAttrs[] =
-    " type=\"number\" step=\"0.000001\"";
+    " inputmode=\"decimal\" placeholder=\"e.g. 52.367600\"";
 
+constexpr char kCustomHead[] =
+    "<style>"
+    ".radar-card{background:rgba(128,128,128,0.12);border:1px solid rgba(128,128,128,0.3);border-radius:8px;padding:12px;margin:12px 0 16px 0;text-align:center;}"
+    ".radar-btn-map{background-color:#107c41!important;color:#fff!important;border:none!important;padding:10px 14px!important;border-radius:6px!important;font-weight:bold!important;cursor:pointer!important;width:100%!important;font-size:14px!important;margin:4px 0 8px 0!important;display:block!important;}"
+    ".radar-btn-ip{background-color:#0078d4!important;color:#fff!important;border:none!important;padding:9px 12px!important;border-radius:6px!important;font-size:13px!important;cursor:pointer!important;width:100%!important;margin:4px 0 8px 0!important;display:block!important;}"
+    ".radar-btn-gps{background-color:#4a5568!important;color:#fff!important;border:none!important;padding:8px 12px!important;border-radius:6px!important;font-size:13px!important;cursor:pointer!important;width:100%!important;margin:4px 0 8px 0!important;display:block!important;}"
+    "#map-view{height:250px;width:100%;border-radius:6px;margin:10px 0 6px 0;border:1px solid rgba(128,128,128,0.4);display:none;z-index:10;}"
+    "#gps-status{font-size:12px;line-height:1.4;margin-top:6px;min-height:16px;}"
+    "</style>";
+
+constexpr char kGpsToolsHtml[] =
+    "<div class='radar-card'>"
+    "<div style='font-size:15px;font-weight:bold;margin-bottom:8px;'>&#x1F4CD; Radar Center Location</div>"
+    "<button type='button' class='radar-btn-map' onclick='openMapPicker()'>&#x1F5FA;&#xFE0F; Pick Location on Interactive Map</button>"
+    "<button type='button' class='radar-btn-ip' onclick='fetchIpLocation()'>&#x1F310; Auto-Detect via IP</button>"
+    "<button type='button' class='radar-btn-gps' onclick='fetchPhoneGps()'>&#x1F4CD; Use Phone GPS Sensor</button>"
+    "<div id='map-view'></div>"
+    "<div id='gps-status'></div>"
+    "</div>"
+    "<script>"
+    "function openMapPicker(){"
+    "var mapEl=document.getElementById('map-view');"
+    "var s=document.getElementById('gps-status');"
+    "mapEl.style.display='block';"
+    "var elLat=document.getElementById('radar_lat')||document.querySelector('input[name=\"radar_lat\"]');"
+    "var elLon=document.getElementById('radar_lon')||document.querySelector('input[name=\"radar_lon\"]');"
+    "var curLat=parseFloat(elLat?elLat.value:0)||52.3676;"
+    "var curLon=parseFloat(elLon?elLon.value:0)||4.9041;"
+    "function initMap(){"
+    "if(window._radarMap){"
+    "window._radarMap.invalidateSize();"
+    "window._radarMap.setView([curLat,curLon],14);"
+    "if(window._radarMarker) window._radarMarker.setLatLng([curLat,curLon]);"
+    "return;"
+    "}"
+    "var map=L.map('map-view').setView([curLat,curLon],14);"
+    "window._radarMap=map;"
+    "L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OSM'}).addTo(map);"
+    "var marker=L.marker([curLat,curLon],{draggable:true}).addTo(map);"
+    "window._radarMarker=marker;"
+    "function updatePos(lat,lon){"
+    "if(elLat) elLat.value=lat.toFixed(6);"
+    "if(elLon) elLon.value=lon.toFixed(6);"
+    "s.innerHTML='<span style=\"color:#28a745;font-weight:bold;\">&#x2714; Selected: '+lat.toFixed(6)+', '+lon.toFixed(6)+'</span>';"
+    "}"
+    "marker.on('dragend',function(e){var p=e.target.getLatLng();updatePos(p.lat,p.lng);});"
+    "map.on('click',function(e){marker.setLatLng(e.latlng);updatePos(e.latlng.lat,e.latlng.lng);});"
+    "s.innerHTML='<span style=\"color:#107c41;font-weight:bold;\">&#x2705; Map active: Tap anywhere or drag pin</span>';"
+    "setTimeout(function(){map.invalidateSize();},250);"
+    "}"
+    "if(window.L){"
+    "initMap();"
+    "}else{"
+    "s.innerHTML='<span style=\"color:#0078d4;\">&#x23F3; Loading map...</span>';"
+    "var css=document.createElement('link');"
+    "css.rel='stylesheet';"
+    "css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';"
+    "document.head.appendChild(css);"
+    "var js=document.createElement('script');"
+    "js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';"
+    "js.onload=function(){initMap();};"
+    "js.onerror=function(){s.innerHTML='<span style=\"color:#d9534f;\">Map could not be loaded. Use Auto-Detect via IP or enter coordinates manually.</span>';};"
+    "document.head.appendChild(js);"
+    "}"
+    "}"
+    "function fetchPhoneGps(){"
+    "var s=document.getElementById('gps-status');"
+    "if(!navigator.geolocation){"
+    "s.innerHTML='<span style=\"color:#d9534f\">&#x26A0; Geolocation is not supported by this browser.</span>';"
+    "return;"
+    "}"
+    "s.innerHTML='<span style=\"color:#0078d4\">&#x23F3; Requesting GPS position from device...</span>';"
+    "navigator.geolocation.getCurrentPosition("
+    "function(pos){"
+    "var lat=pos.coords.latitude.toFixed(6);"
+    "var lon=pos.coords.longitude.toFixed(6);"
+    "var acc=Math.round(pos.coords.accuracy||0);"
+    "var elLat=document.getElementById('radar_lat')||document.querySelector('input[name=\"radar_lat\"]');"
+    "var elLon=document.getElementById('radar_lon')||document.querySelector('input[name=\"radar_lon\"]');"
+    "if(elLat)elLat.value=lat;"
+    "if(elLon)elLon.value=lon;"
+    "s.innerHTML='<span style=\"color:#28a745;font-weight:bold;\">&#x2714; Acquired: '+lat+', '+lon+(acc?' (&plusmn;'+acc+'m)':'')+'</span>';"
+    "if(window._radarMap){"
+    "window._radarMap.setView([parseFloat(lat),parseFloat(lon)],15);"
+    "if(window._radarMarker) window._radarMarker.setLatLng([parseFloat(lat),parseFloat(lon)]);"
+    "}"
+    "},"
+    "function(err){"
+    "var m='<div style=\"color:#d9534f;margin-bottom:6px;\">&#x26A0; Browser blocked direct GPS (Chrome/Safari require HTTPS for phone GPS).</div>';"
+    "m+='<div style=\"font-size:12px;color:#555;margin-bottom:8px;\">Please tap <strong>Pick Location on Interactive Map</strong> above to select your location visually.</div>';"
+    "s.innerHTML=m;"
+    "},"
+    "{enableHighAccuracy:true,timeout:10000,maximumAge:0}"
+    ");"
+    "}"
+    "function fetchIpLocation(){"
+    "var s=document.getElementById('gps-status');"
+    "s.innerHTML='<span style=\"color:#0078d4\">&#x23F3; Detecting location from IP...</span>';"
+    "fetch('/api/geolocate')"
+    ".then(function(r){return r.json();})"
+    ".then(function(d){"
+    "if(d&&d.lat&&d.lon){"
+    "var lat=Number(d.lat).toFixed(6);"
+    "var lon=Number(d.lon).toFixed(6);"
+    "var elLat=document.getElementById('radar_lat')||document.querySelector('input[name=\"radar_lat\"]');"
+    "var elLon=document.getElementById('radar_lon')||document.querySelector('input[name=\"radar_lon\"]');"
+    "if(elLat)elLat.value=lat;"
+    "if(elLon)elLon.value=lon;"
+    "s.innerHTML='<span style=\"color:#28a745;font-weight:bold;\">&#x2714; IP Location: '+lat+', '+lon+'</span>';"
+    "if(window._radarMap){"
+    "window._radarMap.setView([parseFloat(lat),parseFloat(lon)],14);"
+    "if(window._radarMarker) window._radarMarker.setLatLng([parseFloat(lat),parseFloat(lon)]);"
+    "}"
+    "}else{throw new Error();}"
+    "})"
+    ".catch(function(){"
+    "fetch('https://ipapi.co/json/')"
+    ".then(function(r){return r.json();})"
+    ".then(function(d){"
+    "if(d&&d.latitude&&d.longitude){"
+    "var lat=Number(d.latitude).toFixed(6);"
+    "var lon=Number(d.longitude).toFixed(6);"
+    "var elLat=document.getElementById('radar_lat')||document.querySelector('input[name=\"radar_lat\"]');"
+    "var elLon=document.getElementById('radar_lon')||document.querySelector('input[name=\"radar_lon\"]');"
+    "if(elLat)elLat.value=lat;"
+    "if(elLon)elLon.value=lon;"
+    "s.innerHTML='<span style=\"color:#28a745;font-weight:bold;\">&#x2714; IP Location ('+(d.city||'Detected')+'): '+lat+', '+lon+'</span>';"
+    "if(window._radarMap){"
+    "window._radarMap.setView([parseFloat(lat),parseFloat(lon)],14);"
+    "if(window._radarMarker) window._radarMarker.setLatLng([parseFloat(lat),parseFloat(lon)]);"
+    "}"
+    "}else{throw new Error();}"
+    "})"
+    ".catch(function(){"
+    "s.innerHTML='<span style=\"color:#d9534f\">IP lookup unavailable offline. Radar will auto-detect from IP once connected to Wi-Fi.</span>';"
+    "});"
+    "});"
+    "}"
+    "try{"
+    "var p=new URLSearchParams(window.location.search);"
+    "var qLat=p.get('radar_lat')||p.get('lat');"
+    "var qLon=p.get('radar_lon')||p.get('lon');"
+    "if(qLat&&qLon){"
+    "var eLa=document.getElementById('radar_lat')||document.querySelector('input[name=\"radar_lat\"]');"
+    "var eLo=document.getElementById('radar_lon')||document.querySelector('input[name=\"radar_lon\"]');"
+    "if(eLa)eLa.value=qLat;"
+    "if(eLo)eLo.value=qLon;"
+    "}"
+    "}catch(e){}"
+    "</script>";
+
+WiFiManagerParameter s_param_gps_tools(kGpsToolsHtml);
 WiFiManagerParameter s_param_lat("radar_lat", "Latitude (deg)", "0",
                                 kCoordParamLen, kCoordInputAttrs);
 WiFiManagerParameter s_param_lon("radar_lon", "Longitude (deg)", "0",
@@ -111,6 +265,7 @@ void onPortalParamsSaved() {
 
 void attachPortalParams(WiFiManager& wm) {
   refreshPortalParamDefaults();
+  wm.addParameter(&s_param_gps_tools);
   wm.addParameter(&s_param_lat);
   wm.addParameter(&s_param_lon);
   wm.addParameter(&s_param_miles);
@@ -216,6 +371,21 @@ bool wifiLinkUp() {
          WiFi.localIP() != IPAddress(0, 0, 0, 0);
 }
 
+void setupCustomWebRoutes() {
+  if (s_wm.server) {
+    s_wm.server->on("/api/geolocate", HTTP_GET, []() {
+      if (services::location::fetchFromIpGeolocation()) {
+        char json[128];
+        snprintf(json, sizeof(json), "{\"success\":true,\"lat\":%.6f,\"lon\":%.6f}",
+                 services::location::lat(), services::location::lon());
+        s_wm.server->send(200, "application/json", json);
+      } else {
+        s_wm.server->send(500, "application/json", "{\"success\":false}");
+      }
+    });
+  }
+}
+
 void ensureWifiManager() {
   if (s_wm_configured) {
     return;
@@ -224,7 +394,14 @@ void ensureWifiManager() {
   s_wm.setAPStaticIPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1),
                            IPAddress(255, 255, 255, 0));
   s_wm.setHostname(config::kPortalHostname);
+  s_wm.setTitle("Plane Radar");
+
+  std::vector<const char*> menu = {"wifi", "param", "info", "update", "exit"};
+  s_wm.setMenu(menu);
+  s_wm.setCustomHeadElement(kCustomHead);
+
   s_wm.setAPCallback(onConfigPortalApStarted);
+  s_wm.setWebServerCallback(setupCustomWebRoutes);
   attachPortalParams(s_wm);
   s_wm_configured = true;
 }
@@ -355,6 +532,7 @@ bool openConfigPortal() {
   WiFi.mode(WIFI_OFF);
   delay(50);
   statusScreenPortal();
+  refreshPortalParamDefaults();
   s_wm.setConfigPortalBlocking(false);
   s_wm.startConfigPortal(config::kPortalApName);
   while (s_wm.getConfigPortalActive()) {
@@ -435,9 +613,59 @@ bool wifiReconnect() {
   return connectSavedNetwork(true);
 }
 
+void setupOtaProgressHooks() {
+  static bool s_ota_hooks_initialized = false;
+  if (s_ota_hooks_initialized) {
+    return;
+  }
+  s_ota_hooks_initialized = true;
+
+  Update.onProgress([](size_t progress, size_t size) {
+    static bool s_update_started = false;
+    if (!s_update_started) {
+      statusScreenUpdateBegin("Firmware Update");
+      s_update_started = true;
+    }
+    if (size > 0) {
+      const int percent = static_cast<int>((progress * 100) / size);
+      statusScreenUpdateProgress(percent);
+    }
+  });
+
+  s_wm.setPreOtaUpdateCallback([]() {
+    statusScreenUpdateBegin("Web OTA Update");
+  });
+
+  ArduinoOTA.onStart([]() {
+    statusScreenUpdateBegin("OTA Update");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    if (total > 0) {
+      const int percent = static_cast<int>((progress * 100) / total);
+      statusScreenUpdateProgress(percent);
+    }
+  });
+  ArduinoOTA.onEnd([]() {
+    statusScreenUpdateEnd();
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    const char* err_str = "Update Error";
+    if (error == OTA_AUTH_ERROR) err_str = "Auth Failed";
+    else if (error == OTA_BEGIN_ERROR) err_str = "Begin Failed";
+    else if (error == OTA_CONNECT_ERROR) err_str = "Connect Failed";
+    else if (error == OTA_RECEIVE_ERROR) err_str = "Receive Failed";
+    else if (error == OTA_END_ERROR) err_str = "End Failed";
+    statusScreenUpdateError(err_str);
+  });
+  ArduinoOTA.setHostname(config::kPortalHostname);
+  ArduinoOTA.begin();
+}
+
 void wifiLoop() {
   ensureWifiManager();
   if (wifiLinkUp()) {
+    setupOtaProgressHooks();
+    ArduinoOTA.handle();
     if (!s_wm.getWebPortalActive() && !s_wm.getConfigPortalActive()) {
       startLanWebPortal();
     }
@@ -467,6 +695,9 @@ bool wifiSetupConnect() {
     Serial.println("Opening WiFi setup portal (after reset)");
     if (openConfigPortal() && wifiLinkUp()) {
       WiFi.setAutoReconnect(true);
+      if (!services::location::isConfigured()) {
+        services::location::fetchFromIpGeolocation();
+      }
       Serial.printf("Connected: %s  IP %s\n", WiFi.SSID().c_str(),
                     WiFi.localIP().toString().c_str());
       return true;
@@ -480,6 +711,9 @@ bool wifiSetupConnect() {
 
   if (wifiLinkUp()) {
     WiFi.setAutoReconnect(true);
+    if (!services::location::isConfigured()) {
+      services::location::fetchFromIpGeolocation();
+    }
     Serial.printf("Connected: %s  IP %s\n", WiFi.SSID().c_str(),
                   WiFi.localIP().toString().c_str());
     return true;
@@ -487,6 +721,9 @@ bool wifiSetupConnect() {
 
   if (storedWifiCredentials() && connectSavedNetwork(true)) {
     WiFi.setAutoReconnect(true);
+    if (!services::location::isConfigured()) {
+      services::location::fetchFromIpGeolocation();
+    }
     Serial.printf("Connected: %s  IP %s\n", WiFi.SSID().c_str(),
                   WiFi.localIP().toString().c_str());
     return true;
@@ -500,6 +737,9 @@ bool wifiSetupConnect() {
 
   if (openConfigPortal() && wifiLinkUp()) {
     WiFi.setAutoReconnect(true);
+    if (!services::location::isConfigured()) {
+      services::location::fetchFromIpGeolocation();
+    }
     Serial.printf("Connected: %s  IP %s\n", WiFi.SSID().c_str(),
                   WiFi.localIP().toString().c_str());
     return true;

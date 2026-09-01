@@ -22,6 +22,8 @@ constexpr unsigned long kWifiConnectingFrameMs = 50;
 constexpr unsigned long kWifiDownGraceMs = 4000;
 /** Minimum interval between background reconnect tries. */
 constexpr unsigned long kWifiReconnectIntervalMs = 15000;
+/** Duration to show the connected status screen on boot (ms). */
+constexpr unsigned long kConnectedStatusDurationMs = 5000;
 
 // --- BOOT button (ESP32-C3 Super Mini, active LOW) ---
 constexpr gpio_num_t kBootPin = GPIO_NUM_9;
@@ -44,9 +46,11 @@ constexpr uint32_t kDisplaySpiWriteHz = 40000000;
 constexpr bool kDisplayInvert = true;
 constexpr bool kDisplayRgbOrder = true;
 
-// --- Radar center defaults (overridden via WiFi setup portal) ---
+// --- Radar center defaults (overridden via WiFi setup portal or IP geolocation) ---
 constexpr double kDefaultRadarLat = 52.3676;
 constexpr double kDefaultRadarLon = 4.9041;
+constexpr char kIpGeoUrl[] = "http://ip-api.com/json";
+constexpr unsigned long kIpGeoTimeoutMs = 5000;
 
 /** Poll adsb.fi (API public limit: 1 req/s). */
 constexpr unsigned long kAdsbFetchIntervalMs = 3000;
