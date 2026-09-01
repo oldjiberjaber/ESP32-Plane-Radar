@@ -23,6 +23,8 @@ uint16_t kColorGrid = 0x0320;
 uint16_t kColorLabel = 0xFFFF;
 uint16_t kColorCenter = 0xFFFF;
 uint16_t kColorAircraft = 0x001F;
+uint16_t kColorMilitaryAircraft = 0x07FF;
+uint16_t kColorMilitaryTag = 0x07FF;
 uint16_t kColorTrackVector = 0xFFFF;
 uint16_t kColorTagType = 0x5DFF;
 uint16_t kColorTagAltitude = 0xFFE0;
@@ -181,9 +183,17 @@ void initPalette() {
   if (config::kDisplayRgbOrder) {
     radar::kColorAircraft =
         tft.color565(radar::kAircraftB, radar::kAircraftG, radar::kAircraftR);
+    radar::kColorMilitaryAircraft =
+        tft.color565(radar::kMilitaryB, radar::kMilitaryG, radar::kMilitaryR);
+    radar::kColorMilitaryTag =
+        tft.color565(radar::kMilitaryB, radar::kMilitaryG, radar::kMilitaryR);
   } else {
     radar::kColorAircraft =
         tft.color565(radar::kAircraftR, radar::kAircraftG, radar::kAircraftB);
+    radar::kColorMilitaryAircraft =
+        tft.color565(radar::kMilitaryR, radar::kMilitaryG, radar::kMilitaryB);
+    radar::kColorMilitaryTag =
+        tft.color565(radar::kMilitaryR, radar::kMilitaryG, radar::kMilitaryB);
   }
   radar::kColorTrackVector =
       tft.color565(radar::kTrackR, radar::kTrackG, radar::kTrackB);
@@ -270,9 +280,8 @@ bool beyondRingEdgeDotFromLatLon(float lat, float lon, int* out_x, int* out_y) {
   return true;
 }
 
-void drawBeyondRingDot(int x, int y) {
-  s_draw->fillSmoothCircle(x, y, radar::kBeyondRingDotRadiusPx,
-                           radar::kColorAircraft);
+void drawBeyondRingDot(int x, int y, uint16_t color) {
+  s_draw->fillSmoothCircle(x, y, radar::kBeyondRingDotRadiusPx, color);
 }
 
 void clipPointToOuterRing(int x0, int y0, int* x1, int* y1) {
@@ -431,7 +440,9 @@ void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane) {
   ly = std::max(1, std::min(ly, radar::kSize - block_h - 1));
 
   if (plane.callsign[0] != '\0') {
-    s_draw->setTextColor(radar::kColorLabel, radar::kColorBackground);
+    const uint16_t callsign_color =
+        plane.is_military ? radar::kColorMilitaryTag : radar::kColorLabel;
+    s_draw->setTextColor(callsign_color, radar::kColorBackground);
     s_draw->drawString(plane.callsign, anchor_x, ly);
   }
   ly += line_h;
@@ -459,6 +470,7 @@ struct BeyondDotDrawItem {
   int x = 0;
   int y = 0;
   int dist_sq = 0;
+  bool is_military = false;
 };
 
 void sortDrawItemsFarFirst(AircraftDrawItem* items, size_t count) {
@@ -523,12 +535,16 @@ void drawAircraft() {
     dots[dot_count].x = dot_x;
     dots[dot_count].y = dot_y;
     dots[dot_count].dist_sq = distSqFromCenter(dot_x, dot_y);
+    dots[dot_count].is_military = planes[i].is_military;
     ++dot_count;
   }
 
   sortBeyondDotsFarFirst(dots, dot_count);
   for (size_t d = 0; d < dot_count; ++d) {
-    drawBeyondRingDot(dots[d].x, dots[d].y);
+    const uint16_t dot_color = dots[d].is_military
+                                   ? radar::kColorMilitaryAircraft
+                                   : radar::kColorAircraft;
+    drawBeyondRingDot(dots[d].x, dots[d].y, dot_color);
   }
 
   sortDrawItemsFarFirst(items, draw_count);
@@ -536,9 +552,12 @@ void drawAircraft() {
     const size_t i = items[d].index;
     const int x = items[d].x;
     const int y = items[d].y;
+    const uint16_t plane_color = planes[i].is_military
+                                     ? radar::kColorMilitaryAircraft
+                                     : radar::kColorAircraft;
     drawSpeedVector(x, y, planes[i].nose_deg, planes[i].track_deg,
                     planes[i].gs_knots, radar::kColorTrackVector);
-    drawHeadingTriangle(x, y, planes[i].nose_deg, radar::kColorAircraft);
+    drawHeadingTriangle(x, y, planes[i].nose_deg, plane_color);
   }
   for (size_t d = 0; d < draw_count; ++d) {
     const size_t i = items[d].index;

@@ -187,6 +187,54 @@ void formatAltitudeTag(const JsonObject& plane, char* out, size_t out_len) {
   }
 }
 
+bool isMilitaryAircraft(const JsonObject& plane, const char* type,
+                        const char* callsign) {
+  // 1. readsb / adsb.fi standard dbFlags bitmask (bit 0 = military)
+  if (plane["dbFlags"].is<int>()) {
+    if ((plane["dbFlags"].as<int>() & 1) != 0) {
+      return true;
+    }
+  }
+  // 2. Explicit "mil" field
+  if (plane["mil"].is<bool>() && plane["mil"].as<bool>()) {
+    return true;
+  }
+  if (plane["mil"].is<int>() && plane["mil"].as<int>() != 0) {
+    return true;
+  }
+  // 3. Military ICAO type codes
+  if (type != nullptr && type[0] != '\0') {
+    static const char* const kMilTypes[] = {
+        "F15", "F16", "F18", "F22", "F35", "EUFI", "TYPH", "GR4", "TOR", "TORN",
+        "A10", "B52", "B1", "B2", "C17", "C130", "C30J", "A400", "KC35", "K35R",
+        "KC10", "KC46", "MRTT", "V22", "CV22", "MV22", "E3TF", "E3CF", "P8", "P3",
+        "C5", "C5M", "U2", "RC135", "HAWK", "T38", "T6", "T45", "TEX2", "TU95",
+        "TU22", "SU27", "SU30", "SU34", "SU35", "MIG29", "MIG31", "J10", "J20",
+        "AH64", "UH60", "CH47", "CH53", "NH90", "EC665", "LYNX", "WILD", "EH10"
+    };
+    for (const char* mil_type : kMilTypes) {
+      if (strcasecmp(type, mil_type) == 0) {
+        return true;
+      }
+    }
+  }
+  // 4. Common military callsign prefixes
+  if (callsign != nullptr && callsign[0] != '\0') {
+    static const char* const kMilCallsigns[] = {
+        "RFR", "RRR", "ASCOT", "TARTAN", "RAFAIR", "SNOOP", "NATO", "MAGIC",
+        "REDEYE", "VIPER", "HAWK", "VADER", "JAKE", "REACH", "EVAC", "TOPCAT",
+        "HAVOC", "WARTHOG", "BOMBER", "SWIFT", "KNIFE", "BLADE", "GHOST"
+    };
+    for (const char* prefix : kMilCallsigns) {
+      const size_t len = strlen(prefix);
+      if (strncasecmp(callsign, prefix, len) == 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void fillTagFields(Aircraft* ac, const JsonObject& plane) {
   copyJsonStringTrimmed(plane, "flight", ac->callsign, sizeof(ac->callsign));
   if (ac->callsign[0] == '\0') {
@@ -195,6 +243,7 @@ void fillTagFields(Aircraft* ac, const JsonObject& plane) {
 
   copyJsonStringTrimmed(plane, "t", ac->type, sizeof(ac->type));
   formatAltitudeTag(plane, ac->alt, sizeof(ac->alt));
+  ac->is_military = isMilitaryAircraft(plane, ac->type, ac->callsign);
 }
 
 }  // namespace
