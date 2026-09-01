@@ -352,6 +352,7 @@ void resetWifiCredentials() {
 
 void onConfigPortalApStarted(WiFiManager*) {
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
+  WiFi.softAPsetHostname(config::kPortalHostname);
   statusScreenPortal();
 #ifdef WM_MDNS
   if (MDNS.begin(config::kPortalHostname)) {
@@ -390,6 +391,7 @@ void ensureWifiManager() {
   if (s_wm_configured) {
     return;
   }
+  WiFi.setHostname(config::kPortalHostname);
   s_wm.setConfigPortalTimeout(config::kWifiPortalTimeoutSec);
   s_wm.setAPStaticIPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1),
                            IPAddress(255, 255, 255, 0));
@@ -413,6 +415,7 @@ void startLanWebPortal() {
   }
   refreshPortalParamDefaults();
   WiFi.mode(WIFI_STA);
+  WiFi.setHostname(config::kPortalHostname);
   s_wm.setConfigPortalBlocking(false);
 #ifdef WM_MDNS
   MDNS.end();
@@ -438,6 +441,7 @@ void stopLanWebPortal() {
 void prepareSta() {
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
   WiFi.mode(WIFI_STA);
+  WiFi.setHostname(config::kPortalHostname);
   WiFi.setSleep(WIFI_PS_NONE);
   WiFi.setAutoReconnect(true);
 }
