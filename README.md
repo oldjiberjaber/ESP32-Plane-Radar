@@ -4,6 +4,14 @@
 
 **3D printed case (STL + assembly):** [MakerWorld](https://makerworld.com/en/models/2872376-esp32-plane-radar-live-ads-b-on-a-round-display#profileId-3207083) · **Firmware:** [Releases](https://github.com/MatixYo/ESP32-Plane-Radar/releases)
 
+> [!NOTE]
+> **Enhanced Edition (v2.0)**: This version includes several major features not currently in the upstream main release:
+> - 🗺️ **Interactive OpenStreetMap Picker** & phone GPS / IP geolocation in the setup portal.
+> - 🎨 **Aircraft Category Color Coding** (🔴 Military = Red, 🔵 Commercial = Cyan, 🟢 GA = Green, 🟡 Heli = Gold).
+> - 🚨 **Flashing Emergency Aircraft** (real-time 400ms blink for squawk `7700`/`7600`/`7500` & active emergencies).
+> - 📡 **Wireless OTA Updates** via PlatformIO (`supermini_ota`) and web browser (`/update`).
+> - 🖥️ **Boot Status Display** (5-second screen showing IP and `plane-radar.local`).
+
 Firmware for an **ESP32-C3 Super Mini** and a **1.28″ round GC9A01** display (240×240). Shows a circular **ADS-B radar** around your configured location, with **WiFiManager** for first-time setup.
 
 ## What it does
@@ -41,11 +49,13 @@ The same portal runs on the setup AP and on the device’s LAN IP while connecte
 
 | Field | Purpose |
 |-------|---------|
+| **🗺️ Interactive Map** | Tap anywhere or drag the pin on OpenStreetMap to auto-fill latitude & longitude |
+| **📍 Auto Locate** | One-tap phone GPS / IP geolocation fallback (`/api/geolocate`) |
 | **Latitude / Longitude** | Radar center and ADS-B query position (defaults in `config.h` until set) |
 | **Display distances in miles** | Ring scale label in **mi** instead of **km** (e.g. `6mi` vs `10km`) |
 | **Show airport runways** | Major-airport runway overlay on the radar (off to hide) |
 
-After a reset, the device reboots and shows the setup screen immediately (no “Connecting” loop on stale credentials).
+After boot and Wi‑Fi connection, the device displays a **5-second status screen** showing its IP address and mDNS address (`http://plane-radar.local`). After a reset, the device reboots and shows the setup screen immediately.
 
 ## Radar display
 
@@ -74,19 +84,27 @@ Preset and miles/km choice persist across reboot (`planeradar` NVS namespace).
 - Teal runway lines with one ICAO label per airport (e.g. `KJFK`); toggle in the Wi‑Fi setup portal
 - Update the embedded list: `python3 scripts/build_large_airports.py`
 
-### Aircraft
+### Aircraft & Color Coding
 
-- **Inside the outer ring** — red heading triangle, magenta speed vector (clipped at the ring), callsign / type / altitude tags
-- **Outside the ring** (still within ADS-B fetch) — small **red dot on the screen rim** at the correct bearing (direction cue; not distance-accurate past the ring)
-- **Tags** — placed toward the **center**: west (left) → tag on the **right** of the symbol; east (right) → tag on the **left**
+Aircraft are categorized and color-coded on the radar:
 
-As range decreases (or aircraft approach), targets move inward; beyond-ring dots become full symbols when they cross the outer ring.
+| Category | Indicator | Color |
+| :--- | :--- | :--- |
+| **Military** | Tactical callsigns, military airframes (`F35`, `EUFI`, `C17`, etc.), `adsb.fi` DB flags | 🔴 **Solid Red** |
+| **Commercial Airliners / Jets** | Passenger jets, cargo, business jets (`A320`, `B738`, `B777`, `A350`, `GLF6`, etc.) | 🔵 **Bright Cyan** |
+| **General Aviation / Props** | Light piston aircraft, trainers, turboprops, gliders (`C172`, `PA28`, `SR22`, `PC12`, etc.) | 🟢 **Bright Lime Green** |
+| **Helicopters / Rotorcraft** | Rotorcraft and emergency medical / police helicopters (`H135`, `R44`, `AW139`, etc.) | 🟡 **Gold / Amber** |
+| **In-Flight Emergency** | Active emergency or squawk `7700` (Emergency), `7600` (NORDO), `7500` (Hijack) | 🚨 **Flashing Red (400ms)** |
+
+- **Inside the outer ring** — heading triangle, magenta speed vector (clipped at the ring), and category-colored callsign tag.
+- **Outside the ring** (still within ADS-B fetch) — bearing dot on the screen rim in the aircraft's category color.
+- **Tags** — placed toward the **center**: west (left) → tag on the **right** of the symbol; east (right) → tag on the **left**.
 
 ### ADS-B
 
 - Source: `https://opendata.adsb.fi/api/v3/`
 - Fetch radius: `ui::radar::fetchRadiusKm()` — scales with the active preset to roughly the screen edge (so rim dots have data)
-- Poll interval: `kAdsbFetchIntervalMs` (5 s) in `config.h`
+- Poll interval: `kAdsbFetchIntervalMs` (3 s) in `config.h`
 - Ground aircraft hidden by default (`kAdsbShowGroundAircraft`)
 
 ## Configuration
@@ -151,16 +169,23 @@ src/
 | SCL (SCLK) | GPIO **4** |
 | BOOT (user) | GPIO **9** |
 
-## Build
+## Build & Upload
 
+### USB Serial Upload (Initial / cable flash)
 ```bash
-pio run -t upload
+pio run -t upload -e supermini
 pio device monitor
 ```
-
 - PlatformIO env: **`supermini`**
 - Serial: **115200** baud
 - USB CDC on boot enabled in `platformio.ini` for the Super Mini
+
+### Wireless OTA Upload (Over Wi-Fi)
+```bash
+pio run -t upload -e supermini_ota
+```
+- PlatformIO env: **`supermini_ota`**
+- Or upload `firmware.bin` via the web browser at **`http://plane-radar.local/update`** or **`http://<device-ip>/update`**.
 
 ### Web-flashable release image
 
