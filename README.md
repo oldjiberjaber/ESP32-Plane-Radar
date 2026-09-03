@@ -11,6 +11,8 @@
 > - 🚨 **Flashing Emergency Aircraft** (real-time 400ms blink for squawk `7700`/`7600`/`7500` & active emergencies).
 > - 📡 **Wireless OTA Updates** via PlatformIO (`supermini_ota`) and web browser (`/update`).
 > - 🖥️ **Boot Status Display** (5-second screen showing IP and `plane-radar.local`).
+>
+> **Upgrading existing devices:** Devices running earlier versions must be flashed **once via USB** (using a PC or an **Android phone** with [esptool-js](https://espressif.github.io/esptool-js/)) with `plane-radar-v2.0.0-merged.bin` at offset `0x0` to write the new dual OTA partition table. After this initial flash, all future updates can be done **100% wirelessly over Wi-Fi**.
 
 Firmware for an **ESP32-C3 Super Mini** and a **1.28″ round GC9A01** display (240×240). Shows a circular **ADS-B radar** around your configured location, with **WiFiManager** for first-time setup.
 
@@ -187,29 +189,19 @@ pio run -t upload -e supermini_ota
 - PlatformIO env: **`supermini_ota`**
 - Or upload `firmware.bin` via the web browser at **`http://plane-radar.local/update`** or **`http://<device-ip>/update`**.
 
-### Web-flashable release image
+### Web-flashable release image (PC or Android Mobile)
 
-Single `.bin` for [esptool-js](https://espressif.github.io/esptool-js/) and similar tools (ESP32-C3, 4 MB, flash at **0x0**):
+Single `.bin` (`plane-radar-v2.0.0-merged.bin`) for [esptool-js](https://espressif.github.io/esptool-js/) and [ESP Web Tools](https://web.esphome.io/) (ESP32-C3, 4 MB, flash at **0x0**):
 
-```bash
-chmod +x scripts/merge-firmware.sh   # once
-./scripts/merge-firmware.sh
-```
+- **From a PC (Chrome / Edge):** Plug in the ESP32, visit [espressif.github.io/esptool-js](https://espressif.github.io/esptool-js/), select `plane-radar-v2.0.0-merged.bin` at `0x0`, and click Program.
+- **From an Android Mobile Phone:** Plug the ESP32 into your phone using a USB-C to USB-C / OTG cable, open Chrome, navigate to [espressif.github.io/esptool-js](https://espressif.github.io/esptool-js/), and flash directly from your phone.
 
-Writes `release/plane-radar-merged.bin`. Skip rebuild if firmware is already built:
-
-```bash
-./scripts/merge-firmware.sh --no-build
-```
-
-Or via PlatformIO only (output: `.pio/build/supermini/firmware-merged.bin`):
-
+To build the merged binary locally:
 ```bash
 pio run -e supermini
 pio run -t merge -e supermini
 ```
-
-Put the board in download mode (hold **BOOT**, tap **RESET**), then flash with Chrome/Edge over USB.
+*(Output: `.pio/build/supermini/firmware-merged.bin` or `bin/plane-radar-v2.0.0-merged.bin`).*
 
 ### CI and releases (GitHub Actions)
 
